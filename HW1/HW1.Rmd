@@ -131,6 +131,11 @@ is positive, and exponential functions are always positive everywhere, therefore
 
 This requirement is given in the textbook in section 2.3 on page 27. 
 
+However, we also stated during the lecture that the  survival function must have an infinite limit of zero. If we obtain 
+$\large S(t) = e^{a/b * e^{-bt} - 1}$, and take the limit as $t$ goes to infinity, the limit is $1/e$. So, we do not have 
+a proper hazard function since we do not have a proper Survival function, according to additional notes from the lecture 
+materials. 
+
 ```{R, eval = F}
 
 library(tidyverse)
