@@ -341,5 +341,7 @@ For a one sided test we will use a t test.
 
 * P-value is `r round(p_value, 6)`
 
-* Conclusion: we 
+* Conclusion: we have enough evidence to conclude that the the exponential rate of 6-MP treatment group is smaller than that
+of Placebo group. Therefore, we can conclude that the average survival time of treatment groups is greater than the placebo
+group. 
 
