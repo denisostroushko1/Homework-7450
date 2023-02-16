@@ -7,7 +7,7 @@ output:
 number_sections: FALSE
 toc: FALSE
 ---
-```{r}
+```{r echo = F}
 knitr::opts_chunk$set(echo = F, message = F, warning = F, fig.height=4, fig.width=7,
                       fig.align='center', fig.pos = "H")
 options(scipen=999)
@@ -233,93 +233,58 @@ ggsurvplot(fit, data = l_df,
 
 ```
 
-Now we fit an exponential survival model for each group. Results of model are given below. It appears that the two 
-groups have different parameters, which are statistically significantly different. 
+In order to fit the data to the exponential model, we need one parameter: $\lambda$. We can use the data to obtain an MLE estimate, which is 
+the number of events divided by the total observed exposure - which is the number fo weeks in out case. 
 
-```{r, echo = F, eval = F}
+So, exponential parameter for 6-MP groups is: `r sum(l_df[l_df$group == "6-MP",]$relapse)`/`r sum(l_df[l_df$group == "6-MP",]$weeks)` = 
+`r round( sum(l_df[l_df$group == "6-MP",]$relapse) / sum(l_df[l_df$group == "6-MP",]$weeks),4)`. 
 
-obj <- survfit(Surv(weeks, relapse) ~1 ,data = l_df[l_df$group == "6-MP", ])
-obj2 <- survfit(Surv(weeks, relapse) ~1 ,data = l_df[l_df$group != "6-MP", ])
+So, $S(x) =$  exp(-`r round( sum(l_df[l_df$group == "6-MP",]$relapse) / sum(l_df[l_df$group == "6-MP",]$weeks),4)` * x) for the 6-MP treatment
+group
 
-l_1 <- l_df[l_df$group == "6-MP", ]$weeks %>% unique() %>% sort() %>% unique() %>% length()
-l_2 <- l_df[l_df$group != "6-MP", ]$weeks %>% unique() %>% sort() %>% unique() %>% length()
+Similarly, exponential parameter for the placebo groups is: `r sum(l_df[l_df$group == "Placbo",]$relapse)`/`r sum(l_df[l_df$group == "Placbo",]$weeks)` = 
+`r round( sum(l_df[l_df$group == "Placbo",]$relapse) / sum(l_df[l_df$group == "Placbo",]$weeks),4)`. 
 
-checker_data <- 
-  data.frame(
-    time = c(l_df[l_df$group == "6-MP", ]$weeks %>% unique() %>% sort(),
-             l_df[l_df$group != "6-MP", ]$weeks %>% unique() %>% sort()), 
-    
-    log_cum_haz = c(log(obj$cumhaz),
-                    log(obj2$cumhaz)),
-    
-    group = c(rep("6-MP", l_1), 
-              rep("Placebo", l_2))
-  )
-
-ggplot(data= checker_data, 
-       aes(x = time, 
-           y = log_cum_haz, 
-           color = group)) + 
-  geom_line() + 
-  stat_smooth(method = "lm", se = F)
-
-
-```
-
+So, $S(x) =$  exp(-`r round( sum(l_df[l_df$group == "Placbo",]$relapse) / sum(l_df[l_df$group == "Placbo",]$weeks),4)` * x) for the placebo
+group
 
 ### (b)
 
 We can use the fact that MLE estimates are asymptotically normally distributed, so we can compute a Wald confidence interval 
-for each group using estimate and standard errors from the model output above. 
+for each group using estimate and standard errors. 
 
-In order to obtain a confidence interval for each estimate, we fit two separate models for two groups: 
+Standard error is given by the number of events divided by the square of total exposure. 
 
-```{r}
-summary(survreg(Surv(weeks, relapse) ~ 1 ,data = l_df %>% filter(group == "6-MP"),  dist = "exponential"))
-summary(survreg(Surv(weeks, relapse) ~ 1 ,data = l_df %>% filter(group != "6-MP"),  dist = "exponential"))
-```
+For 6-MP group, the variance of $\hat \lambda$ is `r sum(l_df[l_df$group == "6-MP",]$relapse)`/`r sum(l_df[l_df$group == "6-MP",]$weeks)^2` = 
+`r round( sum(l_df[l_df$group == "6-MP",]$relapse) / sum(l_df[l_df$group == "6-MP",]$weeks)^2,4)`.
 
-The upper and lower bounds for the 95% confidence interval of the 6-MP group are given by 3.686 $\pm$ 1.96 * 0.333. 
-Thus, parameter $\lambda$ for the 6-MP group is 3.686, bounded by (`r round(3.686 - 1.96 * 0.333,3)`, `r round(3.686 + 1.96 * 0.333,3)`). 
+Placebo group variance of $\hat \lambda$ is `r sum(l_df[l_df$group != "6-MP",]$relapse)`/`r sum(l_df[l_df$group != "6-MP",]$weeks)^2` = 
+`r round( sum(l_df[l_df$group != "6-MP",]$relapse) / sum(l_df[l_df$group != "6-MP",]$weeks)^2,4)`.
 
-Parameter $\lambda$ for placebo group is given by 3.686 - 1.527 = `r 3.686 - 1.527`. 
+We need to use 1.96 as a z-value for the confidence interval. 
 
-The upper and lower bounds for the 95% confidence interval of the placebo group are given by `r 3.686 - 1.527` $\pm$ 1.96 * 0.398 
-Thus, parameter $\lambda$ for the 6-MP group is `r 3.686 - 1.527`, bounded by (`r round(3.686 -  1.527 - 1.96 * 0.218,3)`, `r round(3.686 -  1.527 + 1.96 * 0.218,3)`). 
+So, a 95% confidence interval of 6-MP $\hat \lambda$ is given by 
+`r round( sum(l_df[l_df$group != "Placbo",]$relapse) / sum(l_df[l_df$group != "Placbo",]$weeks),4)` $\pm$ 1.96 * 
+`r round( sqrt(sum(l_df[l_df$group == "6-MP",]$relapse) / sum(l_df[l_df$group == "6-MP",]$weeks)^2),4)`
 
-We can check our work by calling the `confint` function in R: 
-```{r}
 
-confint(survreg(Surv(weeks, relapse) ~ 1 ,data = l_df %>% filter(group == "6-MP"),  dist = "exponential"))
-confint(survreg(Surv(weeks, relapse) ~ 1 ,data = l_df %>% filter(group != "6-MP"),  dist = "exponential"))
+A 95% confidence interval of Placebo $\hat \lambda$ is given by 
+`r round( sum(l_df[l_df$group == "Placbo",]$relapse) / sum(l_df[l_df$group == "Placbo",]$weeks),4)` $\pm$ 1.96 * 
+`r round( sqrt(sum(l_df[l_df$group != "6-MP",]$relapse) / sum(l_df[l_df$group != "6-MP",]$weeks)^2),4)`
 
-```
-
-If we look at the confint of the original model we fit, the confidence interval for placebo is given for the difference in 
-rates, and not for the $\lambda$ of placebo group. However, it will be useful in the next section. 
 
 ### (c)
 
-We set up a log-rank test and give results below: 
+We set up a two-sided t-test to compare the estimates. 
 
-```{r, echo = T}
-# perform the log-rank test for two parameters being equal 
+We need pooled variance of the difference estimate, which is the sum of two estimates' variances. The two estimates are normally distributed 
+random variables under MLE conditions, so we can add their variances to get variance of $\hat \lambda_1 - \hat \lambda_2$. 
+
+```{r, echo = F}
+# perform the log-rank test, this compares the entire curve, not just the parameters. 
+# not quire what we are looking for 
 result <- survdiff(Surv(weeks, relapse) ~ group,data = l_df, rho=0)
-```
 
-* $H_0$: the exponential rates of the 6-MP and Placebo groups are identical 
-
-* $H_a$: the exponential rates of the 6-MP and Placebo groups differ
-
-* Chi-square test statistic: 16.8
-
-* P-value: <0.0001. We have enough statistical evidence to conclude that the rates for two groups are different. Therefore
-those in the experimental arm 6-MP are more likely to survive for an extended period of time. 
-
-### (d)
-
-
-```{r}
 
 # lambda of the treatment group 
 l_t <- with(l_df[l_df$group == "6-MP", ], sum(relapse)/sum(weeks))
@@ -331,11 +296,28 @@ var_t <- with(l_df[l_df$group == "6-MP", ], sum(relapse)/sum(weeks)^2)
 # variance of lambda of placebo group 
 var_p <- with(l_df[l_df$group != "6-MP", ], sum(relapse)/sum(weeks)^2)
 
-# combined variance: since estimates and estimators are approximately normally distributed due to MLE, we can add two variances for two idependednt normal random variables 
+# combined variance: since estimates and estimators are approximately normally distributed due to MLE, we can add two variances for two independent normal random variables 
 
 total_var <- var_t + var_p
 
 test_statistic <- (l_t - l_p )/sqrt(total_var)
+```
+
+* $H_0$: the exponential rates of the 6-MP ($\hat \lambda_1=$ `r round(l_t, 6)`) and Placebo ($\hat \lambda_2=$ `r round(l_p, 6)`) groups are identical 
+
+* $H_a$: the exponential rates of the 6-MP and Placebo groups differ
+
+* Test statistics: $\frac{\hat \lambda_1 - \hat \lambda_2}{\sqrt{Var(\hat \lambda_1 - \hat \lambda_2)}}$ = `r round(test_statistic, 4)`
+
+* 2.5th quantile of standard normal distribution is `r qnorm(0.025)`, which is greater than our test statistic
+
+* P-value: <0.0001. We have enough statistical evidence to conclude that the rates for two groups are different. We can test the direction of 
+this difference in the next section
+
+### (d)
+
+
+```{r}
 
 cutoff <- qnorm(p = 0.025, mean = 0, sd = 1)
 
@@ -352,10 +334,10 @@ For a one sided test we will use a t test.
 
 * Estimates with the data: $\hat \lambda_{6-MP}$ = `r round(l_t, 6)`; $\hat \lambda_{Placebo}$ = `r round(l_p, 6)`
 
-* Variance for the difference is the sum of varainces of two estimtes, since they are independent normal variables. 
+* Variance for the difference is the sum of variances of two estimates, since they are independent normal variables. 
   Variance for the difference is `r round(total_var, 6)`
   
-* Cutoff z-value at the lower 5% of the standard normal distribution is 1.65, and the test statistic is `r round(test_statistic, 2)`
+* Cutoff z-value at the lower 5% of the standard normal distribution is -1.65, and the test statistic is `r round(test_statistic, 2)`
 
 * P-value is `r round(p_value, 6)`
 
