@@ -1,0 +1,210 @@
+---
+title: "Homework 2"
+author: "Denis Ostroushko"
+format: 
+  pdf:
+    toc: false 
+    number-sections: false
+    colorlinks: true
+editor: source
+execute: 
+  eval: true
+  echo: false
+  warning: false
+  message: false 
+---
+
+```{r}
+
+library(survival)
+library(tidyverse)
+library(survminer)
+library(muhaz)
+library(km.ci)
+library(KMsurv)
+
+```
+
+# Problem 1
+
+### (i)
+
+We are not able to calculate variance with the information given in this problem. We need the number of 
+events and number of observations at risk for each time point leading up to the time point $j$. 
+
+### (ii)
+
+For an asymptotically normal random variable, either the delta method or an endpoint transformation 
+produce desired outcome. 
+
+We will use the endpoint transformation method to find a confidence interval for the log-odds of surviving 
+past a time point $t_j$. 
+
+First, obtain a confidence interval for the probability of surviving, which is given by 
+
+$$\large \widehat{S(t_j)} \pm 1.96 * \sqrt{\widehat{Vat(S(t_j))}} = (lb, up)$$
+The, for the log-odds of survival, a confidence interval is given by 
+
+$$\Large (log \frac{lb}{1-lb}, log \frac{ub}{1-ub})$$
+**Delta Method** 
+
+if we have to determine the variance, as stated in the Note section, we would use the delta method approach
+to get variance of $T(S(t_j))$. 
+
+First, define $\large g(S(t_j)) = log \frac{S(t_j)}{1-S(t_j)}$
+
+Then, $\large g'(S(t_j))^2 = \frac{d}{dS} g(S(t_j)) = (\frac{1}{S(t_j)} + \frac{1}{1 - S(t_j)})^2$
+
+Therefore, $\large Var[T(S(t_j))] = (\frac{1}{S(t_j)} + \frac{1}{1 - S(t_j)})^2 * Var(S(t_j))$ 
+
+We will need to compute this variance at $t_j$ using the value of $S(t_j)$ and its variance. 
+
+Then we compute a 95% confidence interval: $\large T(S(t_j)) \pm 1.96 * \sqrt{ Var[T(S(t_j))]}$
+
+### (iii)
+
+Alternative hypothesis: $H_a: S_1(t_j) \neq S_0(t_j)$
+
+Test statistic: $\frac{( S_1(t_j) -  S_0(t_j)) - 0}{\sqrt{Var( S_1(t_j)) + Var( S_0(t_j))}}$
+
+Since both $S_1(t_j)$ and $S_0(t_j)$ are normally distributed, we can conduct the two sided test using 1.96 - 
+a 97.5th quantile of standard normal distribution. 
+
+If the absolute value of our test statistic is greater than 1.96, then we can reject the null hypothesis and 
+conclude that the survival probability past time point $t_j$ is different for the two groups. 
+
+
+### (iv)
+
+$$\Large ??$$ 
+
+# Problem 2
+
+```{r}
+data(kidney)
+
+# head(kidney)
+```
+
+### (i)
+
+@fig-km-prob2 shows the two KM survival curves for the two groups. It appears that group 2, with a 
+percutaneously placed catheter, has more evidence that this method of placement delays time of infection 
+more effectively. 
+
+```{r}
+#| label: fig-km-prob2
+#| fig-cap: Kaplan Meier Estiamtes for time to infection in weeks the two groups  
+#| fig-width: 6
+#| fig-height: 6
+
+fit <- survfit(Surv(time, delta) ~type ,data = kidney)
+
+ggsurvplot(fit, data = kidney, 
+           risk.table = F, 
+           pval = TRUE,
+           palette = c("#E41A1C", "#377EB8"), 
+           title = "Survival Estimates by Group",
+           conf.int = TRUE)
+
+```
+
+### (ii)
+
+<!-- https://meichenlu.com/2019-03-03-Survival-Analysis-3-Implementation/ --> 
+
+```{r}
+
+kphaz.res <- kphaz.fit(kidney$time, kidney$delta, method="nelson")
+
+kphaz.res %>% data.frame() %>% 
+  mutate(cumhaz = cumsum(haz)) -> CH_estiamte_date 
+
+ggplot(data = CH_estiamte_date, 
+       aes(x = time, 
+           y = cumhaz)) + geom_step()
+
+# hazard at time 5 
+CH_estiamte_date %>% filter(time == 5) %>% select(haz) %>% unlist()
+
+
+```
+
+### (iii)
+
+```{r}
+
+fit_all <- survfit(Surv(time, delta) ~1 ,data = kidney)
+
+s.km.fit = summary(fit_all, rmean=36)
+
+s.km.fit$table["rmean"]
+
+
+```
+
+### (iv)
+
+```{r}
+# group 1 
+
+fit_type1 <- survfit(Surv(time, delta) ~1 ,data = kidney %>% filter(type == 1))
+s.km.fit_type1 = summary(fit_type1, rmean=36)
+
+s.km.fit_type1$table["rmean"]
+s.km.fit_type1$table["se(rmean)"]
+
+```
+
+```{r}
+# group 2 
+fit_type2 <- survfit(Surv(time, delta) ~1 ,data = kidney %>% filter(type == 2))
+s.km.fit_type2 = summary(fit_type2, rmean=36)
+
+s.km.fit_type2$table["rmean"]
+s.km.fit_type2$table["se(rmean)"]
+
+```
+
+### (v)
+
+```{r}
+# group 1
+
+HW.plain <- km.ci(fit_type1, conf.level=0.9, method="hall-wellner") 
+plot(HW.plain, xlab = "Time", ylab = "Survival Probability", col="red")
+
+```
+
+```{r}
+# group 2
+
+HW.plain <- km.ci(fit_type2, conf.level=0.9, method="hall-wellner") 
+plot(HW.plain, xlab = "Time", ylab = "Survival Probability", col="red")
+
+```
+
+# Problem 3
+
+```{r }
+
+data(kidtran) 
+kidtran_f <- kidtran %>% filter(gender == 2 & race == 1)
+
+```
+
+### (i)
+
+### (ii)
+
+### (iii)
+
+### (iv)
+
+### (v)
+
+### (vi)
+
+### (vii)
+
+
