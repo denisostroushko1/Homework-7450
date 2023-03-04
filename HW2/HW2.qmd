@@ -22,6 +22,7 @@ library(survminer)
 library(muhaz)
 library(km.ci)
 library(KMsurv)
+library(pec)
 
 ```
 
@@ -195,16 +196,154 @@ kidtran_f <- kidtran %>% filter(gender == 2 & race == 1)
 
 ### (i)
 
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+
+fit_3 <- survfit(Surv(time, delta) ~1 ,data = kidtran)
+
+ggsurvplot(fit_3, data = kidtran, 
+           risk.table = F, 
+           pval = TRUE,
+           palette = c("#E41A1C", "#377EB8"), 
+           title = "Survival Estimates by Group",
+           conf.int = TRUE) -> res3
+
+ggplot(data = 
+         data.frame(
+           x = res3$data.survplot$time,
+           log_y = log(res3$data.survplot$surv)
+         ), 
+       aes(x =x , 
+           y = log_y)) + geom_step() + 
+  stat_smooth(method = "lm", color = "red", se = F)
+
+
+```
+
+```{r}
+
+exponential_lambda <- sum(kidtran_f$delta)/sum(kidtran_f$time)
+  
+```
+
+```{R alternative way to get the mode }
+#| eval: false
+#| 
+model1<-survreg(Surv(time, delta) ~ 1, data = kidtran_f, dist="exponential")
+
+summary(model1)
+
+exp(-(summary(model1)$table[,1]))
+exponential_lambda
+
+```
+
 ### (ii)
+
+have to describe the delta method 
+
+```{r}
+
+# we need standard error for labda to get C.I. for survival probability 
+
+var_lambda <- exponential_lambda^2/nrow(kidtran_f)
+
+
+```
+```{r}
+
+t <- 365
+
+point <- exp(-exponential_lambda * t)
+
+se <- sqrt((-t * exp(-exponential_lambda * t))^2 *var_lambda)
+
+lb <- point - 1.96 * se
+ub <- point + 1.96 * se
+
+lb
+ub
+
+```
 
 ### (iii)
 
+```{r}
+
+log_se <- sqrt(t^2 * var_lambda)
+  
+exp((log(point) - 1.96 * log_se)) 
+
+exp((log(point) + 1.96 * log_se))
+
+```
+
 ### (iv)
+
+comment
 
 ### (v)
 
+```{r}
+
+model1<-survfit(Surv(time, delta) ~ 1, data = kidtran_f)
+HW.plain <- km.ci(model1, conf.level=0.9, method="epband") 
+
+nice_ep_data <- 
+  data.frame(
+    time = HW.plain$time,
+    surv = HW.plain$surv, 
+    lower = HW.plain$lower,
+    upper = HW.plain$upper
+  ) %>% 
+  
+  pivot_longer(
+    cols = c("surv", "lower", "upper"), 
+    names_to = "type", 
+    values_to = "value"
+  )
+
+ggplot(data= nice_ep_data, 
+       aes(x = time, 
+           y = value, 
+           color = type)) + geom_step(size = 1, alpha = 0.85) + 
+  scale_color_manual(values = c("lower" = "red", "upper" = "red", "surv" = "blue"))
+
+```
+
 ### (vi)
+
+```{R}
+# mean survival for females restrited to 60 months 
+wf_model <- survfit(Surv(time, delta) ~1 ,data = kidtran %>% filter(gender == 2, race == 1))
+wf_model.sum = summary(wf_model, rmean=1825)
+
+wf_model.sum$table["rmean"]
+wf_model.sum$table["se(rmean)"]
+
+```
+
+```{R}
+# mean survival for males restrited to 60 months 
+wm_model <- survfit(Surv(time, delta) ~1 ,data = kidtran %>% filter(gender == 1, race == 1))
+wm_model.sum = summary(wm_model, rmean=1825)
+
+wm_model.sum$table["rmean"]
+wm_model.sum$table["se(rmean)"]
+
+```
 
 ### (vii)
 
+```{r}
 
+diff <- wm_model.sum$table["rmean"] - wf_model.sum$table["rmean"]
+
+pooled_var <- wm_model.sum$table["se(rmean)"]^2 + wf_model.sum$table["se(rmean)"] ^ 2
+  
+
+diff / sqrt(pooled_var)
+
+
+```
