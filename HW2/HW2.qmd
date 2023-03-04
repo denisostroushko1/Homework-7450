@@ -24,6 +24,8 @@ library(km.ci)
 library(KMsurv)
 library(pec)
 
+options(scipen = 999)
+
 ```
 
 # Problem 1
@@ -54,7 +56,7 @@ to get variance of $T(S(t_j))$.
 
 First, define $\large g(S(t_j)) = log \frac{S(t_j)}{1-S(t_j)}$
 
-Then, $\large g'(S(t_j))^2 = \frac{d}{dS} g(S(t_j)) = (\frac{1}{S(t_j)} + \frac{1}{1 - S(t_j)})^2$
+Then, $\large g'(S(t_j))^2 = [\frac{d}{dS} g(S(t_j))]^2 = (\frac{1}{S(t_j)} + \frac{1}{1 - S(t_j)})^2$
 
 Therefore, $\large Var[T(S(t_j))] = (\frac{1}{S(t_j)} + \frac{1}{1 - S(t_j)})^2 * Var(S(t_j))$ 
 
@@ -66,18 +68,25 @@ Then we compute a 95% confidence interval: $\large T(S(t_j)) \pm 1.96 * \sqrt{ V
 
 Alternative hypothesis: $H_a: S_1(t_j) \neq S_0(t_j)$
 
-Test statistic: $\frac{( S_1(t_j) -  S_0(t_j)) - 0}{\sqrt{Var( S_1(t_j)) + Var( S_0(t_j))}}$
+Pooled standard to test the difference, taking into account the known sample sizes for group 0 and 1 
+at time $t_j$: pooled $\large SE = \sqrt{\frac{(n_1 - 1) * Var( S_1(t_j))}{n_0 + n_1 - 2} + \frac{(n_0 -1) * {Var( S_0(t_j))}}{n_0 + n_1 - 2}}$
 
-Since both $S_1(t_j)$ and $S_0(t_j)$ are normally distributed, we can conduct the two sided test using 1.96 - 
-a 97.5th quantile of standard normal distribution. 
+Test statistic: $\frac{( S_1(t_j) -  S_0(t_j)) - 0}{SE}$
 
-If the absolute value of our test statistic is greater than 1.96, then we can reject the null hypothesis and 
-conclude that the survival probability past time point $t_j$ is different for the two groups. 
-
+Dealing with finite sample sizes, we will need to use t-distribution to test, so the cutoff for significance 
+is $T^* = t_{.975, df = n_0 + n_1 - 2}$. We check the absolute value of our test statistic against $T^*$
 
 ### (iv)
 
-$$\Large ??$$ 
+Confidence interval for the difference for the two sample t-test is: $\large S_1(t_j) - S_0(t_j) \pm t_{.975, df = n_0 + n_1 - 2} * SE$, where $SE$ was defined in the previous section. 
+
+However, comparing just the two point estimates means that we do not need to account for sample size, and 
+can treat $\large S_1(t_j)$ and $\large S_0(t_j)$ as two independent normal random variables. 
+
+Therefore, by properties of independent normal random variables we obtain their pooled standard error as: 
+$\large SE = \sqrt{Var(S_1(t_j)) + Var(S_0(t_j))}$
+
+Then, the confidence interval is given by: $\large S_1(t_j) - S_0(t_j) \pm 1.96 * SE$
 
 # Problem 2
 
@@ -112,78 +121,208 @@ ggsurvplot(fit, data = kidney,
 
 ### (ii)
 
-<!-- https://meichenlu.com/2019-03-03-Survival-Analysis-3-Implementation/ --> 
+@fig-hz provides cumulative hazard estimates for the two groups. We can see that type 2 group has a 
+much flatter cumulative hazard curve since there are less events in that group. 
+
+Code chunk that produces cumulative hazard plot also outputs instant crude hazard for each group at time 5.
 
 ```{r}
+#| label: fig-hz
+#| fig-cap: Hazard functions for two groups 
+#| 
+kphaz.res1 <- 
+  with(kidney %>% filter(type == 1), 
+                         kphaz.fit(time, delta, method="nelson"))
 
-kphaz.res <- kphaz.fit(kidney$time, kidney$delta, method="nelson")
+kphaz.res2 <- 
+  with(kidney %>% filter(type == 2), 
+                         kphaz.fit(time, delta, method="nelson"))
 
-kphaz.res %>% data.frame() %>% 
-  mutate(cumhaz = cumsum(haz)) -> CH_estiamte_date 
+CH_estiamte_date <- 
+  rbind(
+    kphaz.res1 %>% data.frame() %>% 
+      mutate(cumhaz = cumsum(haz), 
+             type = as.factor("1")),
+    
+    kphaz.res2 %>% data.frame() %>% 
+      mutate(cumhaz = cumsum(haz), 
+             type = as.factor("2"))
+  )
+
+lo <- CH_estiamte_date[CH_estiamte_date$type == "2", ][nrow(CH_estiamte_date[CH_estiamte_date$type == "2", ]),]
+
+CH_estiamte_date <-
+  rbind(
+    CH_estiamte_date, 
+    data.frame(
+      time = max(CH_estiamte_date$time), 
+      haz = NA, 
+      var = NA, 
+      cumhaz = lo$cumhaz, 
+      type = "2"
+    )
+  )
 
 ggplot(data = CH_estiamte_date, 
        aes(x = time, 
-           y = cumhaz)) + geom_step()
+           y = cumhaz, 
+           color = type)) + geom_step() + 
+  theme_minimal()
 
 # hazard at time 5 
-CH_estiamte_date %>% filter(time == 5) %>% select(haz) %>% unlist()
+print("Crude hazard for group type 1 at time = 5")
+CH_estiamte_date %>% filter(type == "1", time == 5) %>% select(haz) %>% unlist()
 
+print("Crude hazard for group type 2 at time = 5")
+CH_estiamte_date %>% filter(type == "2", time == 5) %>% select(haz) %>% unlist()
 
 ```
 
 ### (iii)
 
+We can use `R`'s `survfit` and summary functions to obtain a 36-month restricted mean survival time
+
 ```{r}
+#| echo: true
 
-fit_all <- survfit(Surv(time, delta) ~1 ,data = kidney)
+fit_1 <- survfit(Surv(time, delta) ~1 ,data = kidney %>% filter(type == 1))
 
-s.km.fit = summary(fit_all, rmean=36)
+s.km.fit = summary(fit_1, rmean=36)
 
-s.km.fit$table["rmean"]
+fit_2 <- survfit(Surv(time, delta) ~1 ,data = kidney %>% filter(type == 2))
+
+s.km.fit2 = summary(fit_2, rmean=36)
 
 
 ```
+
+Restricted mean survival time for group 1 is: `r round( s.km.fit$table["rmean"],2)`, and the standard error is
+`r round(s.km.fit$table["se(rmean)"] ,2)`. Therefore, a confidence interval is given by (`r round(s.km.fit$table["rmean"] - 1.96 *s.km.fit$table["se(rmean)"] ,2)`, 
+`r round(s.km.fit$table["rmean"] + 1.96 *s.km.fit$table["se(rmean)"],2)`)
+
+Restricted mean survival time for group 2 is: `r round( s.km.fit2$table["rmean"],2)`, and the standard error is
+`r round(s.km.fit2$table["se(rmean)"] ,2)`. Therefore, a confidence interval is given by (`r round(s.km.fit2$table["rmean"] - 1.96 *s.km.fit2$table["se(rmean)"] ,2)`, 
+`r round(s.km.fit2$table["rmean"] + 1.96 *s.km.fit2$table["se(rmean)"],2)`)
 
 ### (iv)
 
+* Null hypothesis: restricted to 36 month mean survival time  for group 1 is equal to mean for group 2
+
+* Alternative hypothesis: restricted means are not equal 
+
+* $\large H_0: \hat \mu^{36}_2 = \hat \mu^{36}_2$
+
+* $\large H_a: \hat \mu^{36}_2 \neq \hat \mu^{36}_2$
+
+* We will conduct a two-sample t-test, so we need a pooled standard error weighted by the sample sizes. 
+
+* Test statistic is $\large \frac{\mu^{36}_2 - \hat \mu^{36}_2 - 0}{pooled \ SE}$
+
+
 ```{r}
-# group 1 
 
-fit_type1 <- survfit(Surv(time, delta) ~1 ,data = kidney %>% filter(type == 1))
-s.km.fit_type1 = summary(fit_type1, rmean=36)
-
-s.km.fit_type1$table["rmean"]
-s.km.fit_type1$table["se(rmean)"]
-
+test_stat <- (s.km.fit2$table["rmean"] - s.km.fit$table["rmean"] - 0)/
+  sqrt(s.km.fit$table["se(rmean)"] ^ 2 * length(which(kidney$type == 1)) / nrow(kidney)
+       + s.km.fit2$table["se(rmean)"] ^ 2* length(which(kidney$type == 2)) / nrow(kidney))
 ```
 
-```{r}
-# group 2 
-fit_type2 <- survfit(Surv(time, delta) ~1 ,data = kidney %>% filter(type == 2))
-s.km.fit_type2 = summary(fit_type2, rmean=36)
+* Test statistic is `r test_stat`
 
-s.km.fit_type2$table["rmean"]
-s.km.fit_type2$table["se(rmean)"]
+* Significance threshold is given by the 97.5th quantile fo the t distribution on the `r nrow(kidney)-2` degrees
+of freedom. So, $T^*$ is `r qt(0.975, df = nrow(kidney-2))`
 
-```
+* So, the two restricted survival mean times are different for the two groups. Time to infection is higher for 
+group 2. 
 
 ### (v)
 
-```{r}
-# group 1
+@fig-HW provides a plow with survival curves and HW confidence bands for each group. We can see that 
+unlike equal probability bands, HW bands remain constant over time. 
 
-HW.plain <- km.ci(fit_type1, conf.level=0.9, method="hall-wellner") 
-plot(HW.plain, xlab = "Time", ylab = "Survival Probability", col="red")
+```{r}
+#| fig-cap: HW confidence bands for two group 
+#| label: fig-HW
+#| 
+HW.plain <- km.ci(fit_1, conf.level=0.95, method="hall-wellner") 
+HW.plain2 <- km.ci(fit_2, conf.level=0.95, method="hall-wellner") 
+
+  rbind(
+    data.frame(
+      time = HW.plain$time, 
+      type = as.factor("1"), 
+      Surv = HW.plain$surv, 
+      HW_lower = HW.plain$lower,
+      HW_upper = HW.plain$upper
+    ),
+    data.frame(
+      time = HW.plain2$time, 
+      type = as.factor("2"), 
+      Surv = HW.plain2$surv, 
+      HW_lower = HW.plain2$lower,
+      HW_upper = HW.plain2$upper
+    )
+  ) -> inter
+
+
+max_time <- max(inter$time)
+
+last_obs <- inter[inter$type == "2", ]
+last_obs <- last_obs[last_obs$time == max(last_obs$time), ]
+  
+Surv_HW_data <- 
+  rbind(inter, 
+        data.frame(
+          time = max_time, 
+          type = as.factor("2"), 
+          Surv = last_obs$Surv, 
+          HW_lower = last_obs$HW_lower, 
+          HW_upper = last_obs$HW_upper
+        ))
+
+Surv_HW_data <- 
+  Surv_HW_data %>% 
+  pivot_longer(
+    col = c("Surv", "HW_lower", "HW_upper"), 
+    values_to = 'value', 
+    names_to = "curve_type"
+  ) %>% 
+  
+  mutate(long_type = paste(type, curve_type)) %>% 
+  
+  arrange(type, time)
+
+
+ggplot(data = Surv_HW_data %>% filter(curve_type == "Surv"), 
+       aes(x = time, 
+           y = value, 
+           color = long_type)) + 
+  geom_step(size = 0.75) + 
+  
+  geom_step(data = Surv_HW_data %>% filter(curve_type != "Surv"), 
+            aes(x = time, 
+                y = value, 
+                color = long_type),
+                legend = F, 
+                linetype = "twodash") + 
+  
+  theme_minimal() + 
+  
+  scale_color_manual(name = "Line type", 
+                     values=c("1 HW_lower" = "red", 
+                                 "1 HW_upper" = "red", 
+                                 "1 Surv" = "red", 
+                                 "2 HW_lower" = "blue", 
+                                 "2 HW_upper" = "blue", 
+                                 "2 Surv" = "blue"), 
+                     labels = c("1 HW_lower" = "Group 1 Survival Curve", 
+                                "1 HW_upper" = "Group 1 HW Band",
+                                "1 HW_lower" = "Group 1 HW Band",
+                                "2 HW_lower" = "Group 2 Survival Curve", 
+                                "2 HW_upper" = "Group 2 HW Band",
+                                "2 HW_lower" = "Group 2 HW Band")) 
 
 ```
 
-```{r}
-# group 2
-
-HW.plain <- km.ci(fit_type2, conf.level=0.9, method="hall-wellner") 
-plot(HW.plain, xlab = "Time", ylab = "Survival Probability", col="red")
-
-```
 
 # Problem 3
 
@@ -196,7 +335,14 @@ kidtran_f <- kidtran %>% filter(gender == 2 & race == 1)
 
 ### (i)
 
+
+I presume we need to identify probability distribution that fits our data. We will obtain a plot of time 
+against survival probabilities on the logarithmic scale. A linear fit will indicate that a simple exponential 
+model with one parameter is an appropriate fit for the data. 
+
 ```{r}
+#| label: fig-check
+#| fig-cap: Validation of exponential model fit to the data 
 #| fig-width: 6
 #| fig-height: 6
 
@@ -216,79 +362,112 @@ ggplot(data =
          ), 
        aes(x =x , 
            y = log_y)) + geom_step() + 
-  stat_smooth(method = "lm", color = "red", se = F)
+  stat_smooth(method = "lm", color = "red", se = F) + 
+  
+  theme_minimal() + 
+  
+  xlab("Time to infection") + 
+  ylab("log S(T)")
 
 
 ```
+
+@fig-check shows that an exponential model is an appropriate fit for the data. 
+We will use the number of observed events and the total observed exposure time to estimate $\hat \lambda$
 
 ```{r}
-
 exponential_lambda <- sum(kidtran_f$delta)/sum(kidtran_f$time)
-  
+  exponential_lambda
 ```
 
-```{R alternative way to get the mode }
-#| eval: false
-#| 
-model1<-survreg(Surv(time, delta) ~ 1, data = kidtran_f, dist="exponential")
-
-summary(model1)
-
-exp(-(summary(model1)$table[,1]))
-exponential_lambda
-
-```
+$\large \hat \lambda$ = `r round(exponential_lambda, 7)`
 
 ### (ii)
 
-have to describe the delta method 
-
 ```{r}
+# bootsrapping
+total = 2000
+t = 365
 
-# we need standard error for labda to get C.I. for survival probability 
+res <- 
+  data.frame(
+    iter = seq(1,total, by = 1), 
+    pred = NA
+  )
 
-var_lambda <- exponential_lambda^2/nrow(kidtran_f)
-
+for(i in 1:total){
+  df <- kidtran_f[sample(rownames(kidtran_f), size = nrow(kidtran_f), replace = T),]
+  
+  el <- sum(df$delta)/sum(df$time)
+  
+  res$pred[i] <- exp(-el * t)
+}
 
 ```
+
+
+Using exponential survival model $S(t) = exp(-0.000094 * t)$, we use $t = 365$ and obtain a 12-month 
+survival probability, which is `r round(exp(-exponential_lambda * 365), 5)`. 
+
+Now, using variance of parameter $\hat \lambda$ we can compute a 95% linear confidence interval, which is 
+given in the `R` output below: 
+
 ```{r}
-
-t <- 365
-
-point <- exp(-exponential_lambda * t)
-
-se <- sqrt((-t * exp(-exponential_lambda * t))^2 *var_lambda)
-
-lb <- point - 1.96 * se
-ub <- point + 1.96 * se
-
-lb
-ub
-
+quantile(res$pred, c(0.025, 0.975))
 ```
 
 ### (iii)
 
 ```{r}
 
-log_se <- sqrt(t^2 * var_lambda)
-  
-exp((log(point) - 1.96 * log_se)) 
+total = 2000
+t = 365
 
-exp((log(point) + 1.96 * log_se))
+res2 <- 
+  data.frame(
+    iter = seq(1,total, by = 1), 
+    pred = NA
+  )
+
+for(i in 1:total){
+  df <- kidtran_f[sample(rownames(kidtran_f), size = nrow(kidtran_f), replace = T),]
+  
+  el <- sum(df$delta)/sum(df$time)
+  
+  res2$pred[i] <- log(exp(-el * t))
+}
+
+res2$prob <- exp(res2$pred)
 
 ```
 
+Using log transformation of survival probability at time 365 days, and exponential transformation of 
+confidence interval endpoints, we use variance of lambda again to compute the 95% confidence interval, given below: 
+
+```{r}
+quantile(res2$prob, c(0.025, 0.975))
+
+```
+
+
 ### (iv)
 
-comment
+Due to large sample size, and small variance of $\hat \lambda$  the two 95% confidence intervals are 
+approximately equal. We know that in small sample sizes log-transformed confidence intervals perform better, 
+but we are not able to see this distinction. 
 
 ### (v)
 
-```{r}
+We use a KM estimated survival curve for to display EP confidence band. @fig-ep shows the results. We can 
+see that a time increases, the band gets wider. That is because EP bands are proportional to the point wise 
+confidence interval estimates, which get larger as time goes on. 
 
+```{r}
+#| label: fig-ep
+#| fig-cap: Equal probability confidence band 
+#| 
 model1<-survfit(Surv(time, delta) ~ 1, data = kidtran_f)
-HW.plain <- km.ci(model1, conf.level=0.9, method="epband") 
+HW.plain <- km.ci(model1, conf.level=0.95, method="epband") 
 
 nice_ep_data <- 
   data.frame(
@@ -308,42 +487,75 @@ ggplot(data= nice_ep_data,
        aes(x = time, 
            y = value, 
            color = type)) + geom_step(size = 1, alpha = 0.85) + 
-  scale_color_manual(values = c("lower" = "red", "upper" = "red", "surv" = "blue"))
+  scale_color_manual(values = c("lower" = "red", "upper" = "red", "surv" = "blue")) + 
+  theme_minimal()
 
 ```
 
 ### (vi)
 
+Use `R` code below to get restricted survival means 
+
 ```{R}
+#| echo: true
 # mean survival for females restrited to 60 months 
 wf_model <- survfit(Surv(time, delta) ~1 ,data = kidtran %>% filter(gender == 2, race == 1))
 wf_model.sum = summary(wf_model, rmean=1825)
 
-wf_model.sum$table["rmean"]
-wf_model.sum$table["se(rmean)"]
+w_mean <- wf_model.sum$table["rmean"]
+w_variance <- wf_model.sum$table["se(rmean)"]^2
 
 ```
 
+* Mean survival time for white females is is `r round(w_mean, 2)`, the standard error is 
+`r round(sqrt(w_variance),2)`. Confidence interval for the mean is 
+(`r round(w_mean - 1.96*sqrt(w_variance), 2)`, `r round(w_mean + 1.96*sqrt(w_variance), 2)`)
+
 ```{R}
+#| echo: true
 # mean survival for males restrited to 60 months 
 wm_model <- survfit(Surv(time, delta) ~1 ,data = kidtran %>% filter(gender == 1, race == 1))
 wm_model.sum = summary(wm_model, rmean=1825)
 
-wm_model.sum$table["rmean"]
-wm_model.sum$table["se(rmean)"]
-
+m_mean <- wm_model.sum$table["rmean"]
+m_variance <- wm_model.sum$table["se(rmean)"]^2
 ```
+
+* Mean survival time for white males is is `r round(m_mean, 2)`, the standard error is 
+`r round(sqrt(m_variance),2)`. Confidence interval for the mean is 
+(`r round(m_mean - 1.96*sqrt(m_variance), 2)`, `r round(m_mean + 1.96*sqrt(m_variance), 2)`)
 
 ### (vii)
 
+We will use the t-test approach to find the confidence interval for the mean survival time between white males
+and white females. We will do so to account for varying sample sizes for these two groups. 
+
 ```{r}
+
+w_n <- nrow(kidtran %>% filter(gender == 2, race == 1))
+m_n <- nrow(kidtran %>% filter(gender == 1, race == 1))
 
 diff <- wm_model.sum$table["rmean"] - wf_model.sum$table["rmean"]
 
-pooled_var <- wm_model.sum$table["se(rmean)"]^2 + wf_model.sum$table["se(rmean)"] ^ 2
-  
+pooled_var2 <- wm_model.sum$table["se(rmean)"]^2 * m_n/(m_n + w_n)+ 
+  wf_model.sum$table["se(rmean)"] ^ 2 * w_n/(m_n + w_n)
 
-diff / sqrt(pooled_var)
-
+diff / sqrt(pooled_var2)
 
 ```
+* The difference is Male mean - Female mean = `r round(diff, 2)`
+
+* Pooled standard error for this difference is `r round(sqrt(pooled_var2), 2)`
+
+* We use 97.5 quantile of the t-distribution with `r m_n + w_n - 2` degrees of freedom in the calculation of 
+the confidence interval 
+
+* Confidence interval is given by `r round(diff, 2)` $\pm$ `r round(qt(0.975, df = m_n + w_n - 2), 4)` * 
+`r round(sqrt(pooled_var2), 2)` = (
+`r round(diff - qt(0.975, df = m_n + w_n - 2) * sqrt(pooled_var2), 2)`,
+`r round(diff + qt(0.975, df = m_n + w_n - 2) * sqrt(pooled_var2), 2)`
+)
+
+* Based on this confidence interval we can conclude that the survival times for males are consistently lower 
+on averages then the survival times of females. 
+
