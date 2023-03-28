@@ -210,13 +210,13 @@ Restricted mean survival time for group 2 is: `r round( s.km.fit2$table["rmean"]
 
 * Alternative hypothesis: restricted means are not equal 
 
-* $\large H_0: \hat \mu^{36}_2 = \hat \mu^{36}_2$
+* $\large H_0: \hat \mu^{36}_1 = \hat \mu^{36}_2$
 
-* $\large H_a: \hat \mu^{36}_2 \neq \hat \mu^{36}_2$
+* $\large H_a: \hat \mu^{36}_1 \neq \hat \mu^{36}_2$
 
 * We will conduct a two-sample t-test, so we need a pooled standard error weighted by the sample sizes. 
 
-* Test statistic is $\large \frac{\mu^{36}_2 - \hat \mu^{36}_2 - 0}{pooled \ SE}$
+* Test statistic is $\large \frac{\mu^{36}_1 - \hat \mu^{36}_2 - 0}{pooled \ SE}$
 
 
 ```{r}
@@ -229,7 +229,7 @@ test_stat <- (s.km.fit2$table["rmean"] - s.km.fit$table["rmean"] - 0)/
 * Test statistic is `r test_stat`
 
 * Significance threshold is given by the 97.5th quantile fo the t distribution on the `r nrow(kidney)-2` degrees
-of freedom. So, $T^*$ is `r qt(0.975, df = nrow(kidney-2))`
+of freedom. So, $T^*$ is `r qt(0.975, df = nrow(kidney)-2)`
 
 * So, the two restricted survival mean times are different for the two groups. Time to infection is higher for 
 group 2. 
