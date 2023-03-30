@@ -289,11 +289,22 @@ that there may be a true difference between the two groups, however, the differe
 
 ### (ii)
 
-```{r}
+I am using a function below to conduct desired test: 
 
+```{r}
+#| echo: true 
 FHtestrcp(Surv(time, delta) ~ type, data = tongue, type = "two-sided", alpha = 0.05)
 
 ```
+
+* Null hypothesis: There is no difference in survival between the two groups being compared.
+
+* Alternative hypothesis: There is a difference in survival between the two groups being compared.
+
+* Test statistic: 1.6; p-value: 0.104
+
+* Conclusion: urvival rates for Aneuploid tumor type appear to be higher than the Diploid group. P-value suggests
+that there may be a true difference between the two groups, however, the difference is not statistically significant at the 95% significance level. We do not reject the null hypothesis due to a lack of statistical evidence. 
 
 ### (iii)
 
@@ -313,12 +324,54 @@ test_stat <- (s.km.fit2$table["rmean"] - s.km.fit$table["rmean"] - 0)/
   sqrt(s.km.fit$table["se(rmean)"] ^ 2 * length(which(tongue$type == 1)) / nrow(tongue)
        + s.km.fit2$table["se(rmean)"] ^ 2* length(which(tongue$type == 2)) / nrow(tongue))
 
-qt(0.975, df = nrow(tongue) - 2)
+# qt(0.975, df = nrow(tongue) - 2)
 ```
+
+* 56-Week restricted mean survival time for Aneuploid Tumor group: `r round( s.km.fit$table["rmean"] , 2)`
+
+* 56-Week restricted mean survival time for Diploid Tumor group: `r round( s.km.fit2$table["rmean"] , 2)`
+
+* Null Hypothesis: $\hat \mu_A = \hat \mu_D$
+
+* Alternative Hypothesis: $\hat \mu_A \neq \hat \mu_D$
+
+* Test statistic calculated using code below: 
+
+```{r}
+#| echo: true
+
+fit_1 <- survfit(Surv(time, delta) ~1 ,data = tongue %>% filter(type == 1))
+
+s.km.fit = summary(fit_1, rmean=56)
+
+fit_2 <- survfit(Surv(time, delta) ~1 ,data = tongue %>% filter(type == 2))
+
+s.km.fit2 = summary(fit_2, rmean=56)
+
+
+test_stat <- abs(s.km.fit2$table["rmean"] - s.km.fit$table["rmean"] - 0)/
+  sqrt(s.km.fit$table["se(rmean)"] ^ 2 * length(which(tongue$type == 1)) / nrow(tongue)
+       + s.km.fit2$table["se(rmean)"] ^ 2* length(which(tongue$type == 2)) / nrow(tongue))
+
+# qt(0.975, df = nrow(tongue) - 2)
+```
+
+* Test statistic: `r round(test_stat, 3)`; P-value: `r 1 - round(pt(test_stat, df = nrow(tongue) - 2, lower.tail = T), 5)`
+
+* Conclusion: small p-value gives us enough statistical evidence to reject null hypothesis. Therefore, we can 
+conclude that the 56-week restricted mean survival time for people with Aneuploid tumor is consistently 
+higher than that of people with Diploid tumor. 
+
 
 # Problem 2
 
 ### (i)
+
+* Null hypothesis: all four survial rates are the same, i.e. there is no difference between the four groups. 
+
+* Althernative hypothesis: some groups haev different survival rates
+
+* Test output: 
 
 ```{r}
 data("larynx")
@@ -326,10 +379,30 @@ data("larynx")
 survdiff(Surv(time, delta) ~ stage, data = larynx, rho = 0)
 
 ```
+* Test - statistic: 22.8; p-value < 0.0005. 
+
+* Conclusion: we have enough evidence to conclude that some droups have differing survival rates. Therefore, 
+we may proceed to conduct pairwise tests and visual exploration of the data to report which groups have 
+higher survival rates for the purpose of statistical inference. 
+
+**Comparison with the book results** 
+
+The book reports results using Z-value, and a standard normal underlying distribution for the hypothesis testing. Therefore, test statistic is different from the one we saw in `R` output. `R` output using Chi-square
+statistic with 3 degrees of freedom. 
+
+However, both test produce extremely small p-values, therefore, we arrive at the same conclusion of rejecting 
+null hypothesis. 
 
 # Problem 3
 
 ### (i)
+
+* Null hypothesis: There is no difference in survival rates between the 4 groups after stratifying for diagnosis
+year
+
+* Alternative hypothesis: There is a difference in survival rates between the 4 groups after stratifying for diagnosis year
+
+* Test output: 
 
 ```{r}
 
@@ -344,18 +417,53 @@ survdiff(Surv(time, delta) ~ stage + strata(strat), data = larynx, rho = 0)
 
 ```
 
+* Test statistic: chi-square = 22.3 on 3 degrees of freedom; p-value < 0.0001
+
+* Conclusion: we reject null hypothesis and conclude that the survival rates for varying stage groups are 
+different, after adjusting for the diagnosis year. 
+
 ### (ii)
+
+**Test 1** 
+
+* Null hypothesis: survival rates for 4 stages are not different for people diagnosed prior to 1975 
+
+* Alternative hypothsis: some survival rates are different for patients diagnosed prior to 1975
+
+* Test output: 
+
+```{r}
+survdiff(Surv(time, delta) ~ stage, data = larynx %>% filter(strat == "Prior to 1975"), rho = 0)
+```
+* Chi-square test statistic with 3 degrees of freedom: 12; p-value: 0.007
+
+* Conclusion: we reject the null hypothesis, some survival rates are different for varying stages for patients diagnosed prior to 1975. 
+
+**Test 2** 
+
+* Null hypothesis: survival rates for 4 stages are not different for people diagnosed in 1975 and later
+
+* Alternative hypothsis: some survival rates are different for patients diagnosed in 1975 and later
 
 ```{r}
 
-survdiff(Surv(time, delta) ~ stage, data = larynx %>% filter(strat == "Prior to 1975"), rho = 0)
 survdiff(Surv(time, delta) ~ stage, data = larynx %>% filter(strat != "Prior to 1975"), rho = 0)
 
 ```
+* Chi-square test statistic with 3 degrees of freedom: 11.6; p-value: 0.009
+
+* Conclusion: we reject the null hypothesis, some survival rates are different for varying stages for patients diagnosed in 1975 and later. 
 
 # Problem 4
 
 ### (i)
+
+
+* Null hypothesis: survival rates for 4 combinations of race and gender are not different 
+
+* Alternative hypothesis: some survival rates for 4 combinations of race and gender are not different 
+
+* Test output: 
 
 ```{r}
 data("kidtran")
@@ -363,51 +471,120 @@ data("kidtran")
 survdiff(Surv(time, delta) ~ race + gender, data = kidtran)
 
 ```
+* P-value: 0.2
+
+* Conclusion: p-value is greater than the accepted significance level with $\alpha = 0.05$, therefore we 
+can not reject null hypothesis. We do not have enough evidence to conclude that the survival rates for the 
+four combinations are different. 
 
 ### (ii)
+
+**Males subset**
+
+* Null hypothesis: survival rates are not different between races for males. 
+
+* Alternative hypothesis: survival rates are different between races for males. 
+
+* Test output: 
 
 ```{r}
 data("kidtran")
 
 survdiff(Surv(time, delta) ~ race, data = kidtran %>% filter(gender == 1))
+```
+
+* Conclusion: chi-square statistic is small and p-value is large. Therefore, we can not reject null hypothesis. 
+So, there is no strong evidence that te survival rates for two races are different for the sub-population of 
+males. 
+
+
+**Females subset**
+
+* Null hypothesis: survival rates are not different between races for females 
+
+* Alternative hypothesis: survival rates are different between races for females
+
+* Test output: 
+
+```{r}
 
 survdiff(Surv(time, delta) ~ race, data = kidtran %>% filter(gender == 2))
 
 ```
+* Conclusion: we reject the null hypothesis and conclude that the survival rates differ between races when 
+considering the population of females. 
 
 ### (iii)
+
+* Null hypothesis: There is no difference in survival rates between races after stratifying for gender 
+stratification 
+
+* Alternative hypothesis: There is a difference in survival rates between races after stratifying for gender 
+stratification 
+
+* Test output: 
 
 ```{r}
 
 survdiff(Surv(time, delta) ~ race + strata(gender), data = kidtran)
 
 ```
+* Conclusion: there are no differences in survival rates between two races when adjusting with stratification 
+by gender. This result is contradictory to the previous part. This result highlights the importance of 
+data exploration and familiarity with sample and effect sizes to detect true effects of covariates. 
 
 # Problem 5
 
 ### (i)
 
+* Null hypothesis: There is no difference in survival rates between risk groups 
+
+* Alternative hypothesis: There is some difference in survival rates between risk groups 
+
+* Test output: 
+
 ```{r}
 data("bmt")
 
 survdiff(Surv(t1, d1) ~ group, data = bmt)
-
 ```
 
+* Conclusion: High test statistic value and low p-value suggest that the survival rates are different for some 
+risk groups. 
+
 ### (ii)
+
+
+* Null hypothesis: There is no difference in survival rates between risk groups when stratifying by 
+hospital site
+
+* Alternative hypothesis: There is some difference in survival rates between risk groups when stratifying by 
+hospital site
+
+* Test output: 
 
 ```{r}
 survdiff(Surv(t1, d1) ~ group + strata(z9), data = bmt)
 ```
+* Conclusion: High test statistic value and low p-value suggest that the survival rates are different for some 
+risk groups when accounting for stratification by hospital site.  
+
 ### (iii)
 
+P-values for pairwise comparisons of survival rates are given below: 
+
 ```{r}
+#| echo: true
 
 library(emmeans)
-
-pairs(survdiff(Surv(t1, d1) ~ group + strata(z9), data = bmt))
 
 pairwise_survdiff(Surv(t1, d1) ~ group, data = bmt, p.adjust.method = "bonferroni")
               
     
 ```
+* Labels: `1` = ALL; `2` = AML Low Risk; `3` = AML High Risk
+
+* It apprears that All-group survival rate is statistically significantly different from AML Low Risk-group survival  rate, after adjuting for multiple comparisons. 
+
+* It apprears that AML Low Risk-group survival rate is statistically significantly different from AAML High Risk- group survival  rate, after adjuting for multiple comparisons. 
+
