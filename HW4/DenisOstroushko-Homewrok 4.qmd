@@ -1,0 +1,184 @@
+---
+title: "Homework 4"
+author: Denis Ostroushko
+format: 
+  pdf:
+    toc: false
+    number-sections: false
+    colorlinks: true
+editor: source
+execute:
+  echo: false
+  warning: false
+  message: false 
+---
+
+```{r}
+
+library(survival)
+library(km.ci)
+library(KMsurv)
+library(tidyverse)
+library(kableExtra)
+library(survminer)
+library(FHtest)
+library(data.table)
+library(survRM2)
+
+```
+
+# Problem 1
+
+### (a)
+
+Proportional Hazards Model: $\large h(t|Z) = h_0(t) exp(\boldsymbol{Z' \hat \beta})$, 
+
+where $\large \boldsymbol{Z' \hat \beta}$ is a linear combination of predictors. In our case, $\boldsymbol{\hat \beta}$ is a vector of 
+length one, a single model estimate that governs estimated differences between groups. 
+
+So, the full expression for the model is: $\large h(t|Z) = h_0(t) exp(\hat \beta * I(Group \ 2))$, thus $Group \ 1$ is a reference level. 
+
+### (b)
+
+We create a dummy variable to conduct regression analysis, set indicator to 0 when an individual is in an 'Untreated' group, and 
+1 when in 'Radiated' group
+
+To write down the partial likelihood for the model, we need to specify the hazard function for the survival times. 
+For Cox proportional hazards model we assume that the hazard function for each group is proportional to the hazard function for the other group, with a constant hazard ratio over the entire observed timeline. 
+
+Generally, partial likelihood for the Cox model is given by:
+
+$$\large L = \prod_{i = 1} ^{N} h_0(T_i)^{\delta_i} * [exp(\boldsymbol{\beta ' X_i})]^{\delta_i} * exp(-H_0(T_i) \ exp(\boldsymbol{\beta'X_i}))$$
+
+
+where: 
+
+1. N is the sample size, 
+2. $\beta$ is the log hazard ratio for the radiated group compared to the untreated group
+3. $X_i$ is the value of the dummy variable for the ith individual (i.e., 0 for untreated, 1 for radiated)
+4. $T_i$ is the observed survival time for the ith individual, 
+5. $\delta_i$ is an indicator variable that takes the value 1 if the survival time is uncensored 
+
+
+### (c)
+
+### (d)
+
+# Problem 2
+
+```{r }
+data('tongue')
+
+# type: Tumor DNA profile (1=Aneuploid Tumor, 2=Diploid Tumor)
+
+# time: Time to death or on-study time, weeks
+
+# delta: Death indicator (0=alive, 1=dead)
+
+```
+
+### (a)
+
+**Breslow** 
+
+```{R}
+#| echo: true
+
+fit <- coxph(Surv(time, delta) ~ type, method="breslow", data=tongue)
+summary(fit)
+
+```
+1. Null hypothesis: no difference in survival rates between groups 
+
+2. Alternative hypothesis: some difference in survival rates between groups 
+
+3. P-value: `r round(coef(summary(fit))[5], 4)`
+
+4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
+
+**Score test**
+
+```{r}
+#| eho: true
+
+score <- summary(fit)$sctest[1]
+score_p_val <- summary(fit)$sctest[3]
+```
+
+1. Null hypothesis: no difference in survival rates between groups 
+
+2. Alternative hypothesis: some difference in survival rates between groups 
+
+3. P-value: `r round(score_p_val, 4)`
+
+4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
+
+### (b)
+
+95% confidence interval is given below
+
+```{r}
+#| echo: true
+exp(confint(fit))
+```
+
+
+### (c)
+
+```{r}
+#| echo: true
+
+fit2 <- coxph(Surv(time, delta) ~ type, method="exact", data=tongue)
+summary(fit2)
+
+```
+
+P-value: `r round(coef(summary(fit2))[5], 4)`
+
+### (d)
+
+Wald is just regular model without special method specification 
+
+```{r}
+fit3 <- coxph(Surv(time, delta) ~ type, data=tongue)
+summary(fit3)
+```
+
+P-value: `r round(coef(summary(fit3))[5], 4)`
+
+### (e)
+
+Breslow
+
+```{r}
+r <- coef(summary(fit))[1:3]
+
+names(r) <- c('coef',  'exp(coef)',   'se(coef)' )
+
+r
+```
+
+```{r}
+fit4 <- coxph(Surv(time, delta) ~ type, data=tongue, method = "efron")
+
+r <- coef(summary(fit4))[1:3]
+
+names(r) <- c('coef',  'exp(coef)',   'se(coef)' )
+
+r
+```
+
+# Problem 3
+
+### (a)
+
+### (b)
+
+### (c)
+
+### (d)
+
+### (e)
+
+### (g)
+
