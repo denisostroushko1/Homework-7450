@@ -13,6 +13,8 @@ execute:
   message: false 
 ---
 
+<!-- relative risk = hazard ratio --> 
+
 ```{r}
 
 library(survival)
@@ -53,16 +55,24 @@ $$\large L = \prod_{i = 1} ^{N} h_0(T_i)^{\delta_i} * [exp(\boldsymbol{\beta ' X
 
 where: 
 
-1. N is the sample size, 
+1. $N$ is the sample size
 2. $\beta$ is the log hazard ratio for the radiated group compared to the untreated group
 3. $X_i$ is the value of the dummy variable for the ith individual (i.e., 0 for untreated, 1 for radiated)
 4. $T_i$ is the observed survival time for the ith individual, 
 5. $\delta_i$ is an indicator variable that takes the value 1 if the survival time is uncensored 
 
+For this case with one dummy predictor the likelihood function has a simpler form
+
+$$\large L = \prod_{i = 1} ^{12} h_0(T_i)^{\delta_i} * [exp(\beta * X_i)]^{\delta_i} * exp(-H_0(T_i) \ exp(\beta * X_i))$$
+
+
 
 ### (c)
 
 ### (d)
+
+The baseline hazard rate for the two models will be different due to different time values that go into the hazard equation. 
+However, variance and betas should be the same due to similar pattern and ordering of events and corresponding groups. 
 
 # Problem 2
 
@@ -79,37 +89,38 @@ data('tongue')
 
 ### (a)
 
-**Breslow** 
+Summary of fitted Cox PH model is given below. We will use the tets statistics and corresponding p-values to conduct the tests we are required. 
 
 ```{R}
 #| echo: true
 
-fit <- coxph(Surv(time, delta) ~ type, method="breslow", data=tongue)
+tongue$descr <- 
+  factor(
+    ifelse(tongue$type == 1, "Aneuploid", "Diplod"), 
+    levels = c("Diplod", "Aneuploid")
+    )
+
+fit <- coxph(Surv(time, delta) ~ descr, method="breslow", data=tongue)
 summary(fit)
 
 ```
+**Breslow** 
+
 1. Null hypothesis: no difference in survival rates between groups 
 
 2. Alternative hypothesis: some difference in survival rates between groups 
 
-3. P-value: `r round(coef(summary(fit))[5], 4)`
+3. P-value: 0.1
 
 4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
 
 **Score test**
 
-```{r}
-#| eho: true
-
-score <- summary(fit)$sctest[1]
-score_p_val <- summary(fit)$sctest[3]
-```
-
 1. Null hypothesis: no difference in survival rates between groups 
 
 2. Alternative hypothesis: some difference in survival rates between groups 
 
-3. P-value: `r round(score_p_val, 4)`
+3. P-value: 0.1
 
 4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
 
@@ -128,7 +139,7 @@ exp(confint(fit))
 ```{r}
 #| echo: true
 
-fit2 <- coxph(Surv(time, delta) ~ type, method="exact", data=tongue)
+fit2 <- coxph(Surv(time, delta) ~ descr, method="exact", data=tongue)
 summary(fit2)
 
 ```
@@ -140,7 +151,7 @@ P-value: `r round(coef(summary(fit2))[5], 4)`
 Wald is just regular model without special method specification 
 
 ```{r}
-fit3 <- coxph(Surv(time, delta) ~ type, data=tongue)
+fit3 <- coxph(Surv(time, delta) ~ descr, data=tongue)
 summary(fit3)
 ```
 
@@ -170,15 +181,106 @@ r
 
 # Problem 3
 
+```{r}
+data('bnct')
+
+bnct$Z1 <- ifelse(bnct$trt == 2, 1, 0)
+bnct$Z2 <- ifelse(bnct$trt == 3, 1, 0)
+
+```
+
 ### (a)
+
+```{r}
+
+fit1 <- coxph(Surv(time, death) ~Z1 + Z2, data=bnct, method = "breslow")
+
+summary(fit1)$coefficient 
+
+```
+
 
 ### (b)
 
+there is no intercept in a cox ph model, so to compare radiated to untreated we need to use estiamte and variance for 
+radiated group 
+
+```{r}
+coef(fit1)[1]
+
+vcov(fit1)[1,1]
+
+c(
+  coef(fit1)[1] - 1.96 * sqrt(vcov(fit1)[1,1]),
+  coef(fit1)[1] + 1.96 * sqrt(vcov(fit1)[1,1])
+)
+```
+
 ### (c)
 
+```{r}
+model_reduced <- coxph(Surv(time, death) ~ 1, data = bnct, method = "breslow")
+
+# Perform the likelihood ratio test using the anova() function
+anova(model_reduced, fit1, test = "Chisq")
+```
+
+```{r}
+
+library(aod)
+wald_test <- wald.test(b = coef(fit1), Sigma = vcov(fit1), Terms = 2:length(coef(fit1)))
+
+# View the results
+wald_test
+
+```
 ### (d)
+
+```{r}
+
+diff = coef(fit1)[1] - coef(fit1)[2]
+
+pooled_var = vcov(fit1)[1,1] + vcov(fit1)[2,2] + 2*vcov(fit1)[1,2]
+
+(diff - 0)/ sqrt(pooled_var)
+
+
+2 * pnorm( abs((diff - 0)/ sqrt(pooled_var)), lower.tail=FALSE)
+
+```
 
 ### (e)
 
+```{r}
+
+exp(
+  c(
+    diff - 1.96 * sqrt(pooled_var),
+    diff + 1.96 * sqrt(pooled_var)
+  )
+)
+
+```
+
+### (e) again 
+
+same as part (c)
+
+```{r}
+anova(model_reduced, fit1, test = "Chisq")
+```
+
+
 ### (g)
 
+same as part (c)
+
+```{r}
+wald_test <- 
+  wald.test(b = coef(fit1)[c("Z1", "Z2")], 
+            Sigma = vcov(fit1)[c("Z1", "Z2"), c("Z1", "Z2")], 
+            Terms = 2:length(coef(fit1)))
+
+# View the results
+wald_test
+```
