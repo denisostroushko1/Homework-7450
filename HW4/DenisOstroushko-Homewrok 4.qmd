@@ -50,7 +50,11 @@ For Cox proportional hazards model we assume that the hazard function for each g
 
 Generally, partial likelihood for the Cox model is given by:
 
-$$\large L = \prod_{i = 1} ^{N} h_0(T_i)^{\delta_i} * [exp(\boldsymbol{\beta ' X_i})]^{\delta_i} * exp(-H_0(T_i) \ exp(\boldsymbol{\beta'X_i}))$$
+L(β) = ∏i[exp(βZi)/(∑j[exp(βZj)I(Tj > Ti)])]^(δi)
+
+
+
+$$\large L = \prod_{i=1}^{n} \frac{exp(\beta Z_i)}{\sum_{j\in R(t_i)}exp(\beta Z_j)}$$
 
 
 where: 
@@ -63,11 +67,11 @@ where:
 
 For this case with one dummy predictor the likelihood function has a simpler form
 
-$$\large L = \prod_{i = 1} ^{12} h_0(T_i)^{\delta_i} * [exp(\beta * X_i)]^{\delta_i} * exp(-H_0(T_i) \ exp(\beta * X_i))$$
-
-
+$$\large L = \prod_{i=1}^{12} \frac{exp(\beta Z_i)}{\sum_{j\in R(t_i)}exp(\beta Z_j)}$$
 
 ### (c)
+
+The data patterns and order of events and corresponding groups remains the same, so the likelihood function will remain almost the same. 
 
 ### (d)
 
@@ -89,7 +93,7 @@ data('tongue')
 
 ### (a)
 
-Summary of fitted Cox PH model is given below. We will use the tets statistics and corresponding p-values to conduct the tests we are required. 
+Summary of fitted Cox PH model is given below. We will use the test statistics and corresponding p-values to conduct the tests we are required. 
 
 ```{R}
 #| echo: true
@@ -104,29 +108,19 @@ fit <- coxph(Surv(time, delta) ~ descr, method="breslow", data=tongue)
 summary(fit)
 
 ```
-**Breslow** 
-
-1. Null hypothesis: no difference in survival rates between groups 
-
-2. Alternative hypothesis: some difference in survival rates between groups 
-
-3. P-value: 0.1
-
-4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
-
 **Score test**
 
 1. Null hypothesis: no difference in survival rates between groups 
 
 2. Alternative hypothesis: some difference in survival rates between groups 
 
-3. P-value: 0.1
+3. Test statistic: 2.75; P-value: 0.1
 
 4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
 
 ### (b)
 
-95% confidence interval is given below
+95% confidence interval is given below, we exponentiate model estimate 
 
 ```{r}
 #| echo: true
@@ -136,26 +130,28 @@ exp(confint(fit))
 
 ### (c)
 
-```{r}
-#| echo: true
+Keep model with Breslow ties handling. Grab likelihood ratio test statistic and p-value. 
 
-fit2 <- coxph(Surv(time, delta) ~ descr, method="exact", data=tongue)
-summary(fit2)
+1. Null hypothesis: no difference in survival rates between groups 
 
-```
+2. Alternative hypothesis: some difference in survival rates between groups 
 
-P-value: `r round(coef(summary(fit2))[5], 4)`
+3. Test statistic: 2.61; P-value = 0.1
+
+4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
 
 ### (d)
 
-Wald is just regular model without special method specification 
+Keep model with Breslow ties handling. Grab Wald test statistic and p-value. 
 
-```{r}
-fit3 <- coxph(Surv(time, delta) ~ descr, data=tongue)
-summary(fit3)
-```
 
-P-value: `r round(coef(summary(fit3))[5], 4)`
+1. Null hypothesis: no difference in survival rates between groups 
+
+2. Alternative hypothesis: some difference in survival rates between groups 
+
+3. Test statistic: 2.7; P-value = 0.1
+
+4. Conclusion: we do not reject null hypothesis due to lack of overwhelming statistical evidence. Although, these results might be suggestive of the fact that there is some difference between the groups 
 
 ### (e)
 
@@ -170,7 +166,7 @@ r
 ```
 
 ```{r}
-fit4 <- coxph(Surv(time, delta) ~ type, data=tongue, method = "efron")
+fit4 <- coxph(Surv(time, delta) ~ descr, data=tongue, method = "efron")
 
 r <- coef(summary(fit4))[1:3]
 
@@ -178,6 +174,8 @@ names(r) <- c('coef',  'exp(coef)',   'se(coef)' )
 
 r
 ```
+
+Estimates are almost identical. I speculate that the small number of ties is the reason for a minor discrepancy. 
 
 # Problem 3
 
@@ -191,7 +189,10 @@ bnct$Z2 <- ifelse(bnct$trt == 3, 1, 0)
 
 ### (a)
 
+columns `coef` and `se(coef)` provide beta estimates for Z1 and Z2
+
 ```{r}
+#| echo: true
 
 fit1 <- coxph(Surv(time, death) ~Z1 + Z2, data=bnct, method = "breslow")
 
@@ -202,54 +203,118 @@ summary(fit1)$coefficient
 
 ### (b)
 
-there is no intercept in a cox ph model, so to compare radiated to untreated we need to use estiamte and variance for 
-radiated group 
+there is no intercept in a cox ph model, so to compare radiated to untreated we need to use estimate and variance for 
+radiated group. First, grab a model estimate
 
 ```{r}
 coef(fit1)[1]
+```
 
+Then grab variance of the estimate to get a standard error
+```{r}
 vcov(fit1)[1,1]
+```
 
-c(
-  coef(fit1)[1] - 1.96 * sqrt(vcov(fit1)[1,1]),
-  coef(fit1)[1] + 1.96 * sqrt(vcov(fit1)[1,1])
-)
+Create a confidence interval and exponentiate the end points to get a confidence interval for the comparison 
+
+```{r}
+#| echo: true
+
+  exp(
+    c(
+      coef(fit1)[1] - 1.96 * sqrt(vcov(fit1)[1,1]),
+      coef(fit1)[1] + 1.96 * sqrt(vcov(fit1)[1,1])
+    )
+  )
+
 ```
 
 ### (c)
+
+To conduct this test we compare the two Cox PH models: with and without two radiation treatment variables. 
+Test output is given below: 
 
 ```{r}
 model_reduced <- coxph(Surv(time, death) ~ 1, data = bnct, method = "breslow")
 
 # Perform the likelihood ratio test using the anova() function
-anova(model_reduced, fit1, test = "Chisq")
+anova(model_reduced, fit1, test = "LRT")
 ```
 
-```{r}
+**LRT**
 
+1. Null hypothesis: $\beta_{Z_1} = \beta_{Z_2} = 0$
+
+2. Not all coefficients are equal to 0 
+
+3. Test statistic: 27.371; p-value < 0.001
+
+4. Conclusion: there is strong evidence that not all beta estimates are equal to 0 and some radiation treatment has effect on survival rates
+
+**Wald Test**
+
+Code for the test is given below: 
+
+```{r}
+#| echo: true
 library(aod)
 wald_test <- wald.test(b = coef(fit1), Sigma = vcov(fit1), Terms = 2:length(coef(fit1)))
 
 # View the results
 wald_test
-
 ```
+
+
+1. Null hypothesis: $\beta_{Z_1} = \beta_{Z_2} = 0$
+
+2. Not all coefficients are equal to 0 
+
+3. Test statistic: 22.0; p-value < 0.001
+
+4. Conclusion: there is strong evidence that not all beta estimates are equal to 0 and some radiation treatment has effect on survival rates
+
+
 ### (d)
 
+First, obtain the difference between coefficients: 
+
 ```{r}
-
+#| echo: true
 diff = coef(fit1)[1] - coef(fit1)[2]
+diff
+```
 
-pooled_var = vcov(fit1)[1,1] + vcov(fit1)[2,2] + 2*vcov(fit1)[1,2]
+Now obtain pooled variance, $\large Var(Diff) = Var(\beta_1) + Var(\beta_2) - 2 Cov(\beta_1, \beta_2)$
+
+```{r}
+#| echo: true
+#| 
+pooled_var = vcov(fit1)[1,1] + vcov(fit1)[2,2] - 2*vcov(fit1)[1,2]
+pooled_var
+```
+
+Conduct Z-test
+
+```{R}
+#| echo: true
 
 (diff - 0)/ sqrt(pooled_var)
 
-
-2 * pnorm( abs((diff - 0)/ sqrt(pooled_var)), lower.tail=FALSE)
-
 ```
 
+1. Null hypothesis: $\beta_1 = \beta_2 = 0$
+
+2. Alternative hypothesis: $\beta_1 \neq \beta_2$
+
+3. Test statistic: `r (diff - 0)/ sqrt(pooled_var)`; P-value: `r 2 * pnorm( abs((diff - 0)/ sqrt(pooled_var)), lower.tail=FALSE)`
+
+4. Conclusion: we have strong evidence to believe that the two coefficients are different. Therefore, effect of two treatments on the 
+survival rates are not the same 
+
 ### (e)
+
+Using previous part, obtain a confidence interval for the difference using quantiles of normal distribution. Then exponentiate the 
+endpoints to get a confidence interval for the relative risk. 
 
 ```{r}
 
@@ -270,6 +335,7 @@ same as part (c)
 anova(model_reduced, fit1, test = "Chisq")
 ```
 
+Same conclusion follows 
 
 ### (g)
 
@@ -284,3 +350,5 @@ wald_test <-
 # View the results
 wald_test
 ```
+
+Same conclusion follows 
