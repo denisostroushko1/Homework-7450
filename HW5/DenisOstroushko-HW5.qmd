@@ -1,0 +1,355 @@
+---
+title: "Homework 5"
+author: Denis Ostroushko
+format: 
+  pdf:
+    toc: false
+    number-sections: false
+    colorlinks: true
+editor: source
+execute:
+  echo: false
+  warning: false
+  message: false 
+---
+
+```{r}
+
+library(survival)
+library(km.ci)
+library(KMsurv)
+library(tidyverse)
+library(kableExtra)
+library(survminer)
+library(FHtest)
+library(data.table)
+library(survRM2)
+
+```
+
+# Exercise 1
+
+```{R}
+data("larynx")
+
+larynx$stage <- 
+  factor(
+    larynx$stage, 
+    levels = unique(sort(larynx$stage))
+  )
+
+larynx$diagyr_strata <- 
+  factor(
+  with(larynx, 
+       case_when(
+         diagyr < 75 ~ "Prior to 1975", 
+         T ~ "1975 and later"
+       ))
+)
+```
+
+### (a)
+
+R output for a regression model is given below. All three tests suggest that there is evidence to conclude that some variables included in the model are helpful at explaining the outcome. 
+
+```{r}
+cox_1_a <- coxph(Surv(time = time, event = delta) ~ age + stage, data = larynx)
+summary(cox_1_a)
+```
+
+### (b)
+
+Stratification by diagnosis year produces similar results. 
+Coefficients, and therefore hazard rations, tell a similar story between the two models. Standard errors appear similar as well. 
+
+```{r}
+cox_1_b <- coxph(Surv(time = time, event = delta) ~ age + stage + strata(diagyr_strata), data = larynx)
+summary(cox_1_b)
+```
+
+### (c)
+
+Code below conducts a likelihood test for the two models.
+
+```{r}
+#| echo: true
+anova(cox_1_a, cox_1_b, test="Chisq")
+```
+
+While we saw that the results of the two models' estimates are similar, it appears that the inclusion of the  stratification variable improves model fit. 
+
+### (d)
+
+I am including code below that I used to conduct the Wald test. Following the book instructions, I am comparing each corresponding estimate between the two strata. 
+
+Walk test suggests that model parameters are similar for the 
+two strata. 
+
+```{r}
+#| echo: true
+coef1 <- summary(cox_1_a)$coefficients
+coef2 <- summary(cox_1_b)$coefficients
+
+waldtest_table <- 
+  data.frame(
+    test_stat = (coef1[,1] - coef2[,1])^2 / (coef1[,3]^2 + coef2[,3]^2)
+  )
+
+waldtest_table$p_val = pchisq(waldtest_table$test_stat, lower.tail = F, df = 1)
+
+waldtest_table
+```
+
+# Exercise 2
+
+```{r}
+data(rats)
+
+# summary(rats$litter)
+
+rats$litter <- as.factor(rats$litter)
+```
+
+### (a)
+
+Exponentiated coefficient and end points of the confidence interval produce desired output for the non-stratified cox regression model 
+
+```{r}
+#| echo: false
+cox_2_a <- coxph(Surv(time = time, event = tumor) ~ trt, data = rats)
+
+exp(summary(cox_2_a)$coefficients[1])
+
+exp(confint(cox_2_a))
+```
+
+### (b)
+
+Stratified model produce similar output and results. 
+
+```{r}
+cox_2_b <- coxph(Surv(time = time, event = tumor) ~ trt + strata(litter), data = rats)
+
+exp(summary(cox_2_b)$coefficients[1])
+
+exp(confint(cox_2_b))
+```
+
+# Exercise 3
+
+
+```{r}
+data(tongue)
+
+tongue$type_descr <- 
+  with(tongue, 
+       case_when(
+         type == 1 ~ 'Aneuploid Tumor', 
+         T ~ 'Diploid Tumor'
+       ))
+
+
+```
+
+### (a)
+
+
+Plot below provides cumulative hazards for the two groups. Visually, they do not appear proportional over time. 
+
+```{r}
+#| eval: false
+
+# Calculation of this crap by hand 
+cox_3_a <- coxph(Surv(time = time, event= delta) ~ type_descr, data = tongue )
+
+cumhaz_plot <- 
+  data.frame(
+    cumhaz = 
+      c(
+        basehaz(coxph(Surv(time = time, event= delta) ~ 1, data = tongue %>% filter(type_descr == 'Aneuploid Tumor')))[,1],
+        basehaz(coxph(Surv(time = time, event= delta) ~ 1, data = tongue %>% filter(type_descr != 'Aneuploid Tumor')))[,1]
+      ),
+    time = 
+      c(
+        basehaz(coxph(Surv(time = time, event= delta) ~ 1, data = tongue %>% filter(type_descr == 'Aneuploid Tumor')))[,2],
+        basehaz(coxph(Surv(time = time, event= delta) ~ 1, data = tongue %>% filter(type_descr != 'Aneuploid Tumor')))[,2]
+      ),
+     group = 
+      c(
+        rep('Aneuploid Tumor', 
+            length(basehaz(coxph(Surv(time = time, event= delta) ~ 1, data = tongue %>% filter(type_descr == 'Aneuploid Tumor')))[,1])),
+        rep('Diploid Tumor', 
+            length(basehaz(coxph(Surv(time = time, event= delta) ~ 1, data = tongue %>% filter(type_descr != 'Aneuploid Tumor')))[,1]))
+      )
+  )
+
+ggplot(data = cumhaz_plot, 
+       aes(x = time, y = (cumhaz), color = group)) + geom_step()
+
+```
+
+```{r}
+cox_3_a <- coxph(Surv(time = time, event= delta) ~ type_descr, data = tongue )
+
+plot_obj <- survfit(Surv(time = time, event= delta) ~ type_descr, data = tongue )
+
+survminer::ggsurvplot(plot_obj, fun = "cumhaz", legend = "bottom")
+```
+
+### (b)
+
+Using some manipulation of the data used for part (a), I carry observed values of cumulative hazard forward and have some data at each time point 1,2,3 ... 
+
+Plot below provides differences of log cumualtive hazards between the two groups. 
+
+```{R}
+#| echo: false 
+ch_df <- 
+  data.frame(
+    time = plot_obj[['time']], 
+    ch = plot_obj[['cumhaz']]
+  )
+
+ch_df$diff = with(ch_df, lag(time) - time)
+
+ch_df$row = as.numeric(rownames(ch_df))
+ch_df$group = "1"
+
+ch_df[ch_df$row >= as.numeric(rownames(ch_df[ch_df$diff > 0 & !is.na(ch_df$diff), ])), ]$group = "2"
+
+ch_df <- ch_df %>% select( -diff)
+
+ch_df_2 <- 
+  data.frame(
+    group = c(
+      rep("1", max(ch_df[ch_df$group == '1', ]$time)),
+      rep("2", max(ch_df[ch_df$group == '2', ]$time))
+    ), 
+    time = c(
+      seq(from = 1, to =  max(ch_df[ch_df$group == '1', ]$time), by = 1),
+      seq(from = 1, to =  max(ch_df[ch_df$group == '2', ]$time), by = 1)
+    )
+  )
+
+ch_df_2 <- 
+  ch_df_2 %>% 
+  left_join(ch_df, by = c("time", "group")) %>% 
+  arrange(group, time)
+
+ch_df_2 <- ch_df_2 %>% select(-row)
+
+for(i in 2:nrow(ch_df_2)){
+  ch_df_2$ch[i] <- 
+      case_when(
+        is.na(ch_df_2$ch[i]) ~ ch_df_2$ch[i-1], 
+        T ~ ch_df_2$ch[i]
+      )
+}
+
+ch_df_2_wide = 
+  ch_df_2 %>% 
+  pivot_wider(
+    values_from = 'ch',
+    names_from = 'group'
+  ) %>% na.omit()
+
+ch_df_2_wide$log_diff = with(ch_df_2_wide, log(ch_df_2_wide$`1` / ch_df_2_wide$`2`))
+
+ch_df_2_wide %>% 
+  ggplot(aes(x = time, y = log_diff)) + geom_line() + 
+  stat_smooth(method = "lm") + 
+  stat_smooth(se = T, color = "red")
+```
+
+Smooth LOESS red regression line shows that the hazards rate proportion seems to increase until approximate time 75, after which the rates are proportional. There is a lot of variance
+in the poprtion of hazards between the two groups.
+
+### (c)
+
+```{r}
+cox_3_c <- coxph(Surv(time = time, event= delta) ~ type_descr, data = tongue )
+
+# plot(resid(object = cox_3_c, type="deviance"))
+
+df_base_haz <- basehaz(cox_3_c, centered = FALSE)
+
+ggplot(data = df_base_haz %>% 
+         filter(time <= 300), mapping = aes(x = time, y = hazard)) +
+    geom_point() +
+    labs(x = "Cox-Snell residuals as pseudo observed times",
+         y = "Estimated cumulative hazard at pseudo observed times") +
+    theme_bw() + theme(legend.key = element_blank()) + 
+  stat_smooth(se = T, color = "red") + 
+  stat_smooth(method = "lm")
+```
+
+I chose to use cox snell residuals to evaluate model fit. 
+
+I removed an outlier that have observed time of around 400. 
+
+Residuals vs time has approximately linear trend, with more 
+and more variance occurring at later times. Later observations have a poor fit to the linear trend, which is common for these sets of residuals 
+
+# Exercise 4
+
+
+### (a)
+
+I am using code below to obtain MLE estimates: 
+
+```{r}
+#| echo: true
+
+# https://stackoverflow.com/questions/9113872/interpreting-weibull-parameters-from-survreg
+
+model <- survreg(Surv(time = time, event= delta) ~ 1, data = tongue, dist = "weibull")
+summary(model)
+
+
+shape <- 1/model$scale      
+scale <- exp( coef(model) ) 
+```
+
+* Shape parameter: `r round(shape, 2)`
+
+* Scale parameter: `r round(scale, 2)`
+
+### (b)
+
+Using output above, we obtain test statistic and a p-value to conduct the test. Null hypothesis: shape parameter is equal to 1. 
+
+* test stat: 27.29
+
+* p-value: 0 
+
+Conclusion: we have enough evidence to conclude that the shape parameter is very different from 1 
+
+### (c)
+
+Plugging in shape and scale MLE parameter into a function, and 
+using 50% percentile of weibull distribution, we 
+obtain an MLE for median survival time: 
+
+```{r}
+#| echo: true 
+med.surv <- qweibull(0.5, shape = shape, scale = scale)
+med.surv
+
+```
+
+### (d)
+
+```{r}
+#| echo: true
+model2 <- survreg(Surv(time = time, event= delta) ~ type_descr, data = tongue, dist = "weibull")
+summary(model2)
+
+```
+
+* Null hypothesis: no effect of ploidy, i.e. the coefficient is equal to 1 
+
+* Test statistic: - 1.91
+
+* p-value: 0.057
+
+Conclusion: the p-value is above the accepted $\alpha =$ 0.05, but it is extremely close. Therefore, we have a moderately strong belief that the effect of ploidy is statistically significant and is idfferent between the two groups. 
